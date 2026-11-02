@@ -337,31 +337,28 @@ $.fn.enableSelection = function() {
                 that.toggleChapterRead(true)
             }
         },
-        toggleChapterRead: function(markRead){
+        toggleChapterRead: function(markRead, psg){
             var that = this;
             var curDate = new Date();
             var curDateFormatted = (curDate.getMonth()+1) + '.' + curDate.getDate() + '.' + (curDate.getFullYear() + '').substr(2);
-            var psg = that._f.currentPassage.psg;
-            var logItem = {
-                psg: psg,
-                logDate: curDateFormatted
-            };
+            psg = psg || that._f.currentPassage.psg;
             var log = that._s.log || [];
             var logRead = that._s.logRead || [];
-            // Toggle  link label
-            if(markRead && $('a[rel="toggle-read"]').hasClass('passage-unread')) {
-                that.toggleReadLink(markRead);
-            }
+            // Update the label on this chapter's link only
+            that.setReadLink(that._e.$main.find('a[rel="toggle-read"]').filter(function(){
+                return $(this).data('psg') === psg;
+            }), markRead);
 
             // Store/Unstore read chapter
             if (markRead) {
                 if(jQuery.inArray(psg,logRead) === -1) {
-                    log.push(logItem);
+                    log.push({ psg: psg, logDate: curDateFormatted });
                     logRead.push(psg);
                 }
             } else {
-                var psgPos = log.indexOf(logItem);
-                if(psgPos !== -1) log.splice(psgPos,1);
+                // Match on psg: the stored logDate may be from another day
+                log = jQuery.grep(log, function(item){ return item.psg !== psg; });
+                logRead = jQuery.grep(logRead, function(p){ return p !== psg; });
             }
             that._s.log = log;
             that._s.logRead = logRead;
@@ -388,18 +385,22 @@ $.fn.enableSelection = function() {
                 })
                 if(!logList.size()) that._e.read.$logNav.append(ul);
             } else {
+                that._e.read.$logNav.find('.log-list').empty();
                 that._e.read.$logNav.find('.empty-placeholder').removeClass('hide');
             }
         },
-        toggleReadLink: function(){
+        // Label only; never calls back into toggleChapterRead
+        setReadLink: function(a, markRead){
+            a.toggleClass('passage-unread', !markRead);
+            a.find('span').text((markRead ? 'Added ' : 'Add ') + a.data('psg') + " to readin' log");
+        },
+        readLinkEvent: function(){
             var that = this;
-            var a = $('a[rel="toggle-read"]');
-            a.toggleClass('passage-unread');
-            var markRead = a.hasClass('passage-unread');
-            var aText = markRead ? a.text().replace('Added','Add') : a.text().replace('Add','Added');
-            a.find('span').html(aText);
-            if (!arguments.length) that.toggleChapterRead(markRead);
-
+            that._e.$main.find('a[rel="toggle-read"]').on('click', function(e){
+                e.preventDefault();
+                var a = $(this);
+                that.toggleChapterRead(a.hasClass('passage-unread'), a.data('psg'));
+            });
         },
         killHashLinkEvent: function(){
             $('a[href^="#"]').on('click', function(e){ e.preventDefault(); return false; });
@@ -630,7 +631,7 @@ $.fn.enableSelection = function() {
             for (var i = 0; i < plength; i++) {
                 var p = passages[i];
                 if (p.bookname != curBook && p.chapter != curChapter) {
-                    readLink = '<a class="passage-unread" data-psg="'+p.bookname+' '+p.chapter+'" href="#" rel="toggle-read"pl><i class="icon-ok"></i><span>Add '+p.bookname+' '+p.chapter+' to readin\' log</span></a>';
+                    readLink = '<a class="passage-unread" data-psg="'+p.bookname+' '+p.chapter+'" href="#" rel="toggle-read"><i class="icon-ok"></i><span>Add '+p.bookname+' '+p.chapter+' to readin\' log</span></a>';
                     if (curBook !== '') txt += readLink;
                     // add heading
                     txt += '<h2 id="'+p.bookname.toLowerCase().replace(' ','_')+'_'+p.chapter.toLowerCase()+'">'+p.bookname+' '+p.chapter+'</h2>'
@@ -658,6 +659,7 @@ $.fn.enableSelection = function() {
             // Add txt to last main
             that._e.$main.html( txt );
             that.attachVerseEvents();
+            that.readLinkEvent();
         },
         /**
          * add verse numbers and wrap each verse in spans to allow for bookmarkin', sharin', and note takin'
